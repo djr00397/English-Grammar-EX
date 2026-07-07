@@ -1,0 +1,30 @@
+name: Telegram Auto Post
+
+on:
+  schedule:
+    # প্রতিদিন ২ বার পোস্ট হবে (উচ্চ RPM দেশের সময়ের ভিত্তিতে - যেমন UTC 12:00 এবং 20:00)
+    - cron: '0 12,20 * * *'
+  workflow_dispatch: # ম্যানুয়ালি রান করার জন্য
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Telegram Bot script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: python bot.py
+        
