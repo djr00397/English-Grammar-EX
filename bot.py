@@ -14,8 +14,8 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 
-# লেটেস্ট গুগল মডেল আপডেট
-model = genai.GenerativeModel('gemini-1.5-flash')
+# লেটেস্ট গুগল মডেল আপডেট (যাতে 404 Error না আসে)
+model = genai.GenerativeModel('gemini-1.5-pro-latest')
 
 def get_seo_content_from_gemini():
     """Generates High-Quality Advanced Grammar Content"""
@@ -39,7 +39,6 @@ def get_seo_content_from_gemini():
     """
     
     try:
-        # JSON গ্যারান্টি দেওয়ার জন্য লেটেস্ট কনফিগারেশন
         response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(
@@ -96,34 +95,20 @@ def generate_leaderboard_post():
     data = load_leaderboard()
     current_month = datetime.now().strftime("%B %Y")
     
-    top_month = sorted(data["monthly"].items(), key=lambda x: x[1], reverse=True)[:10]
-    top_life = sorted(data["lifetime"].items(), key=lambda x: x[1], reverse=True)[:10]
-    
     msg = f"🏆 **OFFICIAL ENGLISH GRAMMAR LEADERBOARD** 🏆\n"
     msg += f"📅 *Period: {current_month}*\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
-    msg += "🥇 **TOP 10 PERFORMERS (THIS MONTH)**\n"
-    if not top_month:
-        msg += "No data yet. Start answering to rank up!\n"
-    for i, (user, score) in enumerate(top_month, 1):
-        msg += f"{i}. {user} ➔ {score} Pts\n"
-        
-    msg += "\n👑 **LEGENDS OF ALL TIME (LIFETIME)**\n"
-    if not top_life:
-        msg += "No data yet.\n"
-    for i, (user, score) in enumerate(top_life, 1):
-        msg += f"{i}. {user} ➔ {score} Pts\n"
-        
+    msg += "🥇 **TOP PERFORMERS (THIS MONTH)**\n"
+    msg += "Keep answering quizzes to maintain your rank! (Channel statistics are calculated internally)\n"
     msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "🔥 *Want to see your name here? Answer today's quizzes correctly! Once submitted, answers cannot be changed.*"
+    msg += "🔥 *Want to master English? Answer today's quizzes correctly! Once submitted, answers cannot be changed.*"
     return msg
 
 def check_and_post_monthly_leaderboard():
     data = load_leaderboard()
     current_month = datetime.now().strftime("%Y-%m")
     
-    if data.get("last_reset_month") != current_month and data.get("monthly"):
+    if data.get("last_reset_month") != current_month:
         leaderboard_text = "🎉 **CONGRATULATIONS TO EVERYONE! MONTHLY FINALS** 🎉\n\n" + generate_leaderboard_post()
         bot.send_message(CHANNEL_ID, leaderboard_text, parse_mode="Markdown")
         
@@ -134,6 +119,7 @@ def check_and_post_monthly_leaderboard():
 def main():
     print("Starting Automated Grammar Bot Posting Task...")
     check_and_post_monthly_leaderboard()
+    
     content = get_seo_content_from_gemini()
     create_notebook_image(content["title"], content["concept"])
     
@@ -151,7 +137,7 @@ def main():
             options=q["options"],
             type="quiz",
             correct_option_id=q["correct_index"],
-            is_anonymous=False
+            is_anonymous=True # <-- এটি True করা হয়েছে টেলিগ্রামের নিয়মানুযায়ী
         )
         time.sleep(2)
         
@@ -159,4 +145,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
