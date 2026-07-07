@@ -4,26 +4,28 @@ import time
 from datetime import datetime
 import telebot
 import google.generativeai as genai
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-# GitHub Secrets থেকে নিরাপদে ডেটা রিড করা হচ্ছে
+# GitHub Secrets থেকে ডেটা রিড
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-pro')
+
+# লেটেস্ট গুগল মডেল আপডেট
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_seo_content_from_gemini():
-    """Generates High-Quality Advanced Grammar Content and Poll Questions"""
+    """Generates High-Quality Advanced Grammar Content"""
     prompt = """
-    Create an advanced English Grammar Lesson. The topic should be highly challenging (e.g., Inversion, Advanced Subjunctive, Dangling Modifiers, Complex Concord).
-    Output must be in strictly valid JSON format with the following keys. Do not include markdown code blocks or ```json wrappers.
+    Create an advanced English Grammar Lesson. Topic must be highly challenging (e.g., Inversion, Advanced Subjunctive, Dangling Modifiers).
+    Output MUST be valid JSON only. Do not include markdown wrappers like ```json.
     
     {
-      "title": "SEO Optimized Catchy Title",
-      "concept": "A deep, advanced explanation of the concept with examples.",
+      "title": "SEO Optimized Title",
+      "concept": "Deep, advanced explanation of the concept.",
       "questions": [
         {
           "question": "Difficult Multiple Choice Question?",
@@ -33,15 +35,23 @@ def get_seo_content_from_gemini():
         }
       ]
     }
-    Generate 5 such difficult questions for the same topic. Ensure the explanation is solid. All in English.
+    Generate 5 such questions.
     """
-    response = model.generate_content(prompt)
+    
     try:
-        text = response.text.strip().replace("```json", "").replace("```", "")
+        # JSON গ্যারান্টি দেওয়ার জন্য লেটেস্ট কনফিগারেশন
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+            )
+        )
+        text = response.text.strip()
         data = json.loads(text)
         return data
     except Exception as e:
-        print("JSON Parsing Error, retrying with fallback...", e)
+        print("API Error:", e)
+        # API ফেইল করলে ব্যাকআপ ডেটা
         return {
             "title": "Advanced Subject-Verb Agreement",
             "concept": "Advanced cases of inversion and hypothetical conditional agreement.",
@@ -51,7 +61,7 @@ def get_seo_content_from_gemini():
         }
 
 def create_notebook_image(title, concept):
-    """Creates a 'Handwritten Advanced Notebook/Khata' style Image"""
+    """Creates a Notebook style Image"""
     img = Image.new('RGB', (800, 1000), color='#FDF6E3')
     draw = ImageDraw.Draw(img)
     
