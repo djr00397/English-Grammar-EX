@@ -1,85 +1,152 @@
 import os
 import json
-import asyncio
-import uuid
-import logging
+import time
 from datetime import datetime
-from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+import telebot
 import google.generativeai as genai
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from PIL import Image, ImageDraw, ImageFont
 
-# লগিং সেটআপ
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# GitHub Secrets থেকে নিরাপদে ডেটা রিড করা হচ্ছে
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
-# --- কনফিগারেশন ---
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-API_KEY = os.getenv("GEMINI_API_KEY")
-CHANNEL_ID = os.getenv("CHANNEL_ID", "-1004329287779") # আপনার সঠিক আইডি এখানে দিন
-ADDSTAR_LINK = "https://www.effectivecpmnetwork.com/d3zp257u?key=17a91a0db9aa186628c02308b1b20e9a"
+bot = telebot.TeleBot(BOT_TOKEN)
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-pro')
 
-genai.configure(api_key=API_KEY)
-bot = Bot(token=TOKEN)
-DATA_FILE = 'data.json'
-
-# --- ডাটাবেস ফাংশন ---
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
-                return json.load(f)
-        except: pass
-    return {"users": {}, "last_update_id": 0, "last_leaderboard_month": 0}
-
-def save_data(data):
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
-
-# --- ইমেজ ফাংশন (ফন্ট এররমুক্ত) ---
-def create_notebook_image():
-    img = Image.new('RGB', (800, 300), color=(255, 255, 255))
-    d = ImageDraw.Draw(img)
-    # ডিফল্ট ফন্ট ব্যবহার করা হয়েছে যাতে এরর না হয়
-    d.text((50, 50), "Advanced English Grammar Challenge\nTest your limits!", fill=(0,0,0))
-    bio = BytesIO()
-    bio.name = 'quiz.png'
-    img.save(bio, 'PNG')
-    bio.seek(0)
-    return bio
-
-async def main():
-    logger.info("Bot is running...")
+def get_seo_content_from_gemini():
+    """Generates High-Quality Advanced Grammar Content and Poll Questions"""
+    prompt = """
+    Create an advanced English Grammar Lesson. The topic should be highly challenging (e.g., Inversion, Advanced Subjunctive, Dangling Modifiers, Complex Concord).
+    Output must be in strictly valid JSON format with the following keys. Do not include markdown code blocks or ```json wrappers.
     
-    # জেমিনি থেকে প্রশ্ন নেওয়া
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = "Give 3 hard grammar MCQ in JSON: [{'question': '...', 'options': {'A':'', 'B':'', 'C':'', 'D':''}, 'correct': 'A'}]"
-    
+    {
+      "title": "SEO Optimized Catchy Title",
+      "concept": "A deep, advanced explanation of the concept with examples.",
+      "questions": [
+        {
+          "question": "Difficult Multiple Choice Question?",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correct_index": 0,
+          "explanation": "Why this is correct."
+        }
+      ]
+    }
+    Generate 5 such difficult questions for the same topic. Ensure the explanation is solid. All in English.
+    """
+    response = model.generate_content(prompt)
     try:
-        response = model.generate_content(prompt)
-        text = response.text.replace('```json', '').replace('```', '').strip()
-        questions = json.loads(text)
+        text = response.text.strip().replace("```json", "").replace("```", "")
+        data = json.loads(text)
+        return data
     except Exception as e:
-        logger.error(f"Gemini Error: {e}")
-        return
+        print("JSON Parsing Error, retrying with fallback...", e)
+        return {
+            "title": "Advanced Subject-Verb Agreement",
+            "concept": "Advanced cases of inversion and hypothetical conditional agreement.",
+            "questions": [
+                {"question": "Hardly _______ the room when the phone rang.", "options": ["had he entered", "he had entered", "entered he", "has he entered"], "correct_index": 0, "explanation": "Negative inversion requires auxiliary verb before subject."}
+            ] * 5
+        }
 
-    # চ্যানেলে পোস্ট করা
-    try:
-        image = create_notebook_image()
-        await bot.send_photo(chat_id=CHANNEL_ID, photo=image, caption="📚 **Today's Quiz**")
+def create_notebook_image(title, concept):
+    """Creates a 'Handwritten Advanced Notebook/Khata' style Image"""
+    img = Image.new('RGB', (800, 1000), color='#FDF6E3')
+    draw = ImageDraw.Draw(img)
+    
+    for y in range(100, 1000, 40):
+        draw.line([(50, y), (750, y)], fill="#D2E4F0", width=1)
+    draw.line([(120, 0), (120, 1000)], fill="#F9A7A7", width=2)
+    
+    draw.text((140, 60), f"TOPIC: {title.upper()}", fill="#B58900", font_size=24)
+    draw.rectangle([(140, 140), (740, 400)], fill="#FFF9E6", outline="#E6DBB2", width=2)
+    
+    lines = [concept[i:i+45] for i in range(0, len(concept), 45)]
+    y_offset = 160
+    draw.text((150, y_offset), "ADVANCED GUIDELINES:", fill="#CB4B16", font_size=18)
+    
+    for line in lines[:7]:
+        y_offset += 30
+        draw.text((150, y_offset), line, fill="#073642", font_size=16)
         
-        for q in questions:
-            keyboard = []
-            for key, val in q['options'].items():
-                if key == q['correct']:
-                    keyboard.append([InlineKeyboardButton(f"✅ {key}: {val}", callback_data="correct")])
-                else:
-                    keyboard.append([InlineKeyboardButton(f"❌ {key}: {val}", url=ADDSTAR_LINK)])
-            
-            await bot.send_message(chat_id=CHANNEL_ID, text=f"❓ {q['question']}", reply_markup=InlineKeyboardMarkup(keyboard))
-        logger.info("Successfully posted to channel!")
-    except Exception as e:
-        logger.error(f"Telegram Post Error: {e}")
+    img.save("lesson.png")
 
-if __name__ == '__main__':
-    asyncio.run(main())
+def load_leaderboard():
+    if not os.path.exists("leaderboard.json"):
+        return {"monthly": {}, "lifetime": {}, "last_reset_month": ""}
+    with open("leaderboard.json", "r") as f:
+        return json.load(f)
+
+def save_leaderboard(data):
+    with open("leaderboard.json", "w") as f:
+        json.dump(data, f, indent=2)
+
+def generate_leaderboard_post():
+    data = load_leaderboard()
+    current_month = datetime.now().strftime("%B %Y")
+    
+    top_month = sorted(data["monthly"].items(), key=lambda x: x[1], reverse=True)[:10]
+    top_life = sorted(data["lifetime"].items(), key=lambda x: x[1], reverse=True)[:10]
+    
+    msg = f"🏆 **OFFICIAL ENGLISH GRAMMAR LEADERBOARD** 🏆\n"
+    msg += f"📅 *Period: {current_month}*\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    msg += "🥇 **TOP 10 PERFORMERS (THIS MONTH)**\n"
+    if not top_month:
+        msg += "No data yet. Start answering to rank up!\n"
+    for i, (user, score) in enumerate(top_month, 1):
+        msg += f"{i}. {user} ➔ {score} Pts\n"
+        
+    msg += "\n👑 **LEGENDS OF ALL TIME (LIFETIME)**\n"
+    if not top_life:
+        msg += "No data yet.\n"
+    for i, (user, score) in enumerate(top_life, 1):
+        msg += f"{i}. {user} ➔ {score} Pts\n"
+        
+    msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+    msg += "🔥 *Want to see your name here? Answer today's quizzes correctly! Once submitted, answers cannot be changed.*"
+    return msg
+
+def check_and_post_monthly_leaderboard():
+    data = load_leaderboard()
+    current_month = datetime.now().strftime("%Y-%m")
+    
+    if data.get("last_reset_month") != current_month and data.get("monthly"):
+        leaderboard_text = "🎉 **CONGRATULATIONS TO EVERYONE! MONTHLY FINALS** 🎉\n\n" + generate_leaderboard_post()
+        bot.send_message(CHANNEL_ID, leaderboard_text, parse_mode="Markdown")
+        
+        data["monthly"] = {}
+        data["last_reset_month"] = current_month
+        save_leaderboard(data)
+
+def main():
+    print("Starting Automated Grammar Bot Posting Task...")
+    check_and_post_monthly_leaderboard()
+    content = get_seo_content_from_gemini()
+    create_notebook_image(content["title"], content["concept"])
+    
+    caption = f"📚 **TODAY'S ADVANCED LESSON: {content['title'].upper()}**\n\n"
+    caption += f"📝 **Core Rule:**\n{content['concept']}\n\n"
+    caption += f"🔍 *Test your knowledge below with 5 ultra-hard exam level questions!*"
+    
+    with open("lesson.png", "rb") as photo:
+        bot.send_photo(CHANNEL_ID, photo, caption=caption, parse_mode="Markdown")
+    
+    for q in content["questions"]:
+        bot.send_poll(
+            chat_id=CHANNEL_ID,
+            question=f"🔥 [HARD] {q['question']}",
+            options=q["options"],
+            type="quiz",
+            correct_option_id=q["correct_index"],
+            is_anonymous=False
+        )
+        time.sleep(2)
+        
+    print("All tasks completed successfully!")
+
+if __name__ == "__main__":
+    main()
+    
