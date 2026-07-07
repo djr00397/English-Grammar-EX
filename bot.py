@@ -1,8 +1,10 @@
 import os
 import time
+import json
 import telebot
+import textwrap
 import google.generativeai as genai
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 # GitHub Secrets থেকে ডেটা রিড
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -12,77 +14,63 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 
-# লেটেস্ট গুগল মডেল
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 def get_seo_content_from_gemini():
-    """Generates High-Quality Advanced Grammar Content (3 Questions & SEO Caption)"""
     prompt = """
-    Create an advanced English Grammar Lesson. Topic must be highly challenging (e.g., Inversion, Subjunctive, Participle Clauses).
-    Output MUST be valid JSON only. Do not include markdown wrappers like ```json.
+    Create an advanced English Grammar Lesson.
+    1. Topic: Choose a unique advanced topic (e.g., Subjunctive, Inversion, Participle Clauses, etc.).
+    2. Formula: A clear, concise rule.
+    3. SEO Caption: Catchy text ending with #IELTS #EnglishGrammarEX and 4-5 relevant dynamic hashtags.
+    4. MCQs: 3 challenging questions with 4 options. Randomize 'correct_index' (0-3).
     
+    Output MUST be valid JSON only (no markdown, no tags).
     {
-      "topic": "Advanced Inversion",
-      "formula": "Write the exact core grammar rule/formula here like a study note. Keep it concise.",
-      "seo_caption": "Write a 2-sentence highly engaging caption. Include 5-7 trending SEO hashtags.",
+      "topic": "Topic Name",
+      "formula": "Concise rule.",
+      "seo_caption": "Engaging caption with hashtags.",
       "questions": [
-        {
-          "question": "Difficult Multiple Choice Question?",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "correct_index": 0,
-          "explanation": "Why this is correct."
-        }
+        {"question": "Q?", "options": ["A", "B", "C", "D"], "correct_index": 0, "explanation": "Why?"}
       ]
     }
-    Generate exactly 3 such difficult questions.
     """
-    
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
-            )
-        )
-        return json.loads(response.text.strip())
+        response = model.generate_content(prompt)
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
     except Exception as e:
         print("API Error:", e)
-        # ব্যাকআপ ডেটা
-        return {
-            "topic": "Advanced Inversion",
-            "formula": "Rule: Negative Adverb + Auxiliary Verb + Subject + Main Verb.\nExample: Rarely do we see such a phenomenon.",
-            "seo_caption": "Master the art of Advanced English Grammar! 🚀 Test your skills below.\n\n#EnglishGrammar #LearnEnglish #IELTS #AdvancedEnglish",
-            "questions": [
-                {"question": "Hardly _______ the room when the phone rang.", "options": ["had he entered", "he had entered", "entered he", "has he entered"], "correct_index": 0, "explanation": "Inversion is required."}
-            ] * 3
-        }
+        return None
 
 def create_notebook_image(topic, formula):
-    """Creates a professional grammar notebook style image."""
-    img = Image.new('RGB', (800, 800), color='#F9F6EE')
+    # ইমেজ সাইজ বড় করা হয়েছে (১২০০x৯০০)
+    img = Image.new('RGB', (1200, 900), color='#F9F6EE')
     draw = ImageDraw.Draw(img)
     
-    # খাতার দাগ ও মার্জিন
-    for y in range(120, 800, 50):
-        draw.line([(0, y), (800, y)], fill="#B0C4DE", width=2)
-    draw.line([(100, 0), (100, 800)], fill="#FA8072", width=3)
+    # ব্যাকগ্রাউন্ড দাগ
+    for y in range(150, 900, 60):
+        draw.line([(0, y), (1200, y)], fill="#B0C4DE", width=2)
+    draw.line([(120, 0), (120, 900)], fill="#FA8072", width=5)
     
-    # টেক্সট ড্রয়িং
-    draw.text((120, 50), f"GRAMMAR LESSON: {topic.upper()}", fill="#B22222", font_size=28)
-    draw.text((120, 130), "📌 FORMULA & RULES:", fill="#000080", font_size=24)
+    # হেডিং ও টেক্সট
+    draw.text((150, 50), f"LESSON: {topic.upper()}", fill="#B22222", font_size=40)
+    draw.text((150, 160), "📌 FORMULA & RULES:", fill="#000080", font_size=35)
     
-    # ফর্মুলা ফরম্যাটিং
-    y_offset = 180
-    for line in formula.split('\n'):
-        draw.text((120, y_offset), line, fill="#333333", font_size=22)
+    # লেখা টেক্সট র‍্যাপ করা যাতে বড় না হয়
+    wrapper = textwrap.TextWrapper(width=60)
+    lines = wrapper.wrap(text=formula)
+    
+    y_offset = 220
+    for line in lines:
+        draw.text((150, y_offset), line, fill="#333333", font_size=30)
         y_offset += 50
         
     img.save("lesson.png")
 
 def main():
-    print("Starting Automated Grammar Bot...")
-    
     content = get_seo_content_from_gemini()
+    if not content: return
+        
     create_notebook_image(content["topic"], content["formula"])
     
     caption = f"📘 **Topic:** {content['topic']}\n\n{content['seo_caption']}"
@@ -97,13 +85,11 @@ def main():
             options=q["options"],
             type="quiz",
             correct_option_id=q["correct_index"],
-            explanation=q.get("explanation", "Correct Answer"),
+            explanation=q.get("explanation", "Keep learning!"),
             is_anonymous=True
         )
-        time.sleep(3)
-        
-    print("Post sent successfully!")
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()
-    
+        
