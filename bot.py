@@ -1,7 +1,5 @@
 import os
-import json
 import time
-from datetime import datetime
 import telebot
 import google.generativeai as genai
 from PIL import Image, ImageDraw
@@ -14,18 +12,19 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 
-# লেটেস্ট গুগল মডেল আপডেট (যাতে 404 Error না আসে)
-model = genai.GenerativeModel('gemini-1.5-pro-latest')
+# লেটেস্ট গুগল মডেল
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 def get_seo_content_from_gemini():
-    """Generates High-Quality Advanced Grammar Content"""
+    """Generates High-Quality Advanced Grammar Content (3 Questions & SEO Caption)"""
     prompt = """
-    Create an advanced English Grammar Lesson. Topic must be highly challenging (e.g., Inversion, Advanced Subjunctive, Dangling Modifiers).
+    Create an advanced English Grammar Lesson. Topic must be highly challenging (e.g., Inversion, Subjunctive, Participle Clauses).
     Output MUST be valid JSON only. Do not include markdown wrappers like ```json.
     
     {
-      "title": "SEO Optimized Title",
-      "concept": "Deep, advanced explanation of the concept.",
+      "topic": "Advanced Inversion",
+      "formula": "Write the exact core grammar rule/formula here like a study note. Keep it concise.",
+      "seo_caption": "Write a 2-sentence highly engaging caption. Include 5-7 trending SEO hashtags.",
       "questions": [
         {
           "question": "Difficult Multiple Choice Question?",
@@ -35,7 +34,7 @@ def get_seo_content_from_gemini():
         }
       ]
     }
-    Generate 5 such questions.
+    Generate exactly 3 such difficult questions.
     """
     
     try:
@@ -45,104 +44,66 @@ def get_seo_content_from_gemini():
                 response_mime_type="application/json",
             )
         )
-        text = response.text.strip()
-        data = json.loads(text)
-        return data
+        return json.loads(response.text.strip())
     except Exception as e:
         print("API Error:", e)
-        # API ফেইল করলে ব্যাকআপ ডেটা
+        # ব্যাকআপ ডেটা
         return {
-            "title": "Advanced Subject-Verb Agreement",
-            "concept": "Advanced cases of inversion and hypothetical conditional agreement.",
+            "topic": "Advanced Inversion",
+            "formula": "Rule: Negative Adverb + Auxiliary Verb + Subject + Main Verb.\nExample: Rarely do we see such a phenomenon.",
+            "seo_caption": "Master the art of Advanced English Grammar! 🚀 Test your skills below.\n\n#EnglishGrammar #LearnEnglish #IELTS #AdvancedEnglish",
             "questions": [
-                {"question": "Hardly _______ the room when the phone rang.", "options": ["had he entered", "he had entered", "entered he", "has he entered"], "correct_index": 0, "explanation": "Negative inversion requires auxiliary verb before subject."}
-            ] * 5
+                {"question": "Hardly _______ the room when the phone rang.", "options": ["had he entered", "he had entered", "entered he", "has he entered"], "correct_index": 0, "explanation": "Inversion is required."}
+            ] * 3
         }
 
-def create_notebook_image(title, concept):
-    """Creates a Notebook style Image"""
-    img = Image.new('RGB', (800, 1000), color='#FDF6E3')
+def create_notebook_image(topic, formula):
+    """Creates a professional grammar notebook style image."""
+    img = Image.new('RGB', (800, 800), color='#F9F6EE')
     draw = ImageDraw.Draw(img)
     
-    for y in range(100, 1000, 40):
-        draw.line([(50, y), (750, y)], fill="#D2E4F0", width=1)
-    draw.line([(120, 0), (120, 1000)], fill="#F9A7A7", width=2)
+    # খাতার দাগ ও মার্জিন
+    for y in range(120, 800, 50):
+        draw.line([(0, y), (800, y)], fill="#B0C4DE", width=2)
+    draw.line([(100, 0), (100, 800)], fill="#FA8072", width=3)
     
-    draw.text((140, 60), f"TOPIC: {title.upper()}", fill="#B58900", font_size=24)
-    draw.rectangle([(140, 140), (740, 400)], fill="#FFF9E6", outline="#E6DBB2", width=2)
+    # টেক্সট ড্রয়িং
+    draw.text((120, 50), f"GRAMMAR LESSON: {topic.upper()}", fill="#B22222", font_size=28)
+    draw.text((120, 130), "📌 FORMULA & RULES:", fill="#000080", font_size=24)
     
-    lines = [concept[i:i+45] for i in range(0, len(concept), 45)]
-    y_offset = 160
-    draw.text((150, y_offset), "ADVANCED GUIDELINES:", fill="#CB4B16", font_size=18)
-    
-    for line in lines[:7]:
-        y_offset += 30
-        draw.text((150, y_offset), line, fill="#073642", font_size=16)
+    # ফর্মুলা ফরম্যাটিং
+    y_offset = 180
+    for line in formula.split('\n'):
+        draw.text((120, y_offset), line, fill="#333333", font_size=22)
+        y_offset += 50
         
     img.save("lesson.png")
 
-def load_leaderboard():
-    if not os.path.exists("leaderboard.json"):
-        return {"monthly": {}, "lifetime": {}, "last_reset_month": ""}
-    with open("leaderboard.json", "r") as f:
-        return json.load(f)
-
-def save_leaderboard(data):
-    with open("leaderboard.json", "w") as f:
-        json.dump(data, f, indent=2)
-
-def generate_leaderboard_post():
-    data = load_leaderboard()
-    current_month = datetime.now().strftime("%B %Y")
-    
-    msg = f"🏆 **OFFICIAL ENGLISH GRAMMAR LEADERBOARD** 🏆\n"
-    msg += f"📅 *Period: {current_month}*\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    msg += "🥇 **TOP PERFORMERS (THIS MONTH)**\n"
-    msg += "Keep answering quizzes to maintain your rank! (Channel statistics are calculated internally)\n"
-    msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "🔥 *Want to master English? Answer today's quizzes correctly! Once submitted, answers cannot be changed.*"
-    return msg
-
-def check_and_post_monthly_leaderboard():
-    data = load_leaderboard()
-    current_month = datetime.now().strftime("%Y-%m")
-    
-    if data.get("last_reset_month") != current_month:
-        leaderboard_text = "🎉 **CONGRATULATIONS TO EVERYONE! MONTHLY FINALS** 🎉\n\n" + generate_leaderboard_post()
-        bot.send_message(CHANNEL_ID, leaderboard_text, parse_mode="Markdown")
-        
-        data["monthly"] = {}
-        data["last_reset_month"] = current_month
-        save_leaderboard(data)
-
 def main():
-    print("Starting Automated Grammar Bot Posting Task...")
-    check_and_post_monthly_leaderboard()
+    print("Starting Automated Grammar Bot...")
     
     content = get_seo_content_from_gemini()
-    create_notebook_image(content["title"], content["concept"])
+    create_notebook_image(content["topic"], content["formula"])
     
-    caption = f"📚 **TODAY'S ADVANCED LESSON: {content['title'].upper()}**\n\n"
-    caption += f"📝 **Core Rule:**\n{content['concept']}\n\n"
-    caption += f"🔍 *Test your knowledge below with 5 ultra-hard exam level questions!*"
+    caption = f"📘 **Topic:** {content['topic']}\n\n{content['seo_caption']}"
     
     with open("lesson.png", "rb") as photo:
         bot.send_photo(CHANNEL_ID, photo, caption=caption, parse_mode="Markdown")
     
-    for q in content["questions"]:
+    for index, q in enumerate(content["questions"], start=1):
         bot.send_poll(
             chat_id=CHANNEL_ID,
-            question=f"🔥 [HARD] {q['question']}",
+            question=f"{index}. {q['question']}",
             options=q["options"],
             type="quiz",
             correct_option_id=q["correct_index"],
-            is_anonymous=True # <-- এটি True করা হয়েছে টেলিগ্রামের নিয়মানুযায়ী
+            explanation=q.get("explanation", "Correct Answer"),
+            is_anonymous=True
         )
-        time.sleep(2)
+        time.sleep(3)
         
-    print("All tasks completed successfully!")
+    print("Post sent successfully!")
 
 if __name__ == "__main__":
     main()
-        
+                            
