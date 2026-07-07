@@ -1,16 +1,18 @@
-name: Telegram Auto Post
+name: Auto Post & Save Telegram Bot
 
 on:
   schedule:
-    # প্রতিদিন ২ বার পোস্ট হবে (উচ্চ RPM দেশের সময়ের ভিত্তিতে - যেমন UTC 12:00 এবং 20:00)
-    - cron: '0 12,20 * * *'
-  workflow_dispatch: # ম্যানুয়ালি রান করার জন্য
+    - cron: '0 10,20 * * *' # UTC সময় অনুযায়ী (দিনে দুইবার)
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -18,13 +20,21 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install Requirements
         run: pip install -r requirements.txt
 
-      - name: Run Telegram Bot script
+      - name: Run Telegram Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python bot.py
-        
+
+      - name: Save Updated Data to GitHub
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "action@github.com"
+          git add data.json
+          git commit -m "Auto-update user scores" || echo "No changes to commit"
+          git push
+          
