@@ -13,24 +13,16 @@ bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-def get_seo_content_from_gemini():
-    # প্রম্পটে পরিবর্তন আনা হয়েছে যাতে উত্তর সবসময় 'A' না হয়
+def get_seo_content():
     prompt = """
     Create an advanced English Grammar Lesson. Topic: Inversion/Subjunctive/Participle.
-    Output MUST be valid JSON. 
-    Make sure the correct_index (0-3) is randomized for every question.
-    
+    Return ONLY valid JSON. Randomize correct_index (0-3).
     {
-      "topic": "Title Here",
+      "topic": "Title",
       "formula": "Concise rule.",
       "seo_caption": "Caption with hashtags.",
       "questions": [
-        {
-          "question": "Question text?",
-          "options": ["A", "B", "C", "D"],
-          "correct_index": (Random number between 0 and 3),
-          "explanation": "Brief explanation."
-        }
+        {"question": "Q?", "options": ["A", "B", "C", "D"], "correct_index": 0, "explanation": "Briefly why."}
       ]
     }
     Generate 3 questions.
@@ -38,10 +30,9 @@ def get_seo_content_from_gemini():
     try:
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(response_mime_type="application/json"))
         return json.loads(response.text.strip())
-    except Exception as e:
-        return None # এরর হলে অটোমেটিক্যালি হ্যান্ডেল হবে
+    except: return None
 
-def create_notebook_image(topic, formula):
+def create_image(topic, formula):
     img = Image.new('RGB', (800, 800), color='#F9F6EE')
     draw = ImageDraw.Draw(img)
     for y in range(120, 800, 50): draw.line([(0, y), (800, y)], fill="#B0C4DE", width=2)
@@ -55,23 +46,13 @@ def create_notebook_image(topic, formula):
     img.save("lesson.png")
 
 def main():
-    content = get_seo_content_from_gemini()
-    if not content: return
-    create_notebook_image(content["topic"], content["formula"])
-    
+    data = get_seo_content()
+    if not data: return
+    create_image(data["topic"], data["formula"])
     with open("lesson.png", "rb") as photo:
-        bot.send_photo(CHANNEL_ID, photo, caption=f"📘 **Topic:** {content['topic']}\n\n{content['seo_caption']}", parse_mode="Markdown")
-    
-    for index, q in enumerate(content["questions"], start=1):
-        bot.send_poll(
-            chat_id=CHANNEL_ID,
-            question=f"{index}. {q['question']}",
-            options=q["options"],
-            type="quiz",
-            correct_option_id=q["correct_index"],
-            explanation=q.get("explanation", "Correct Answer"),
-            is_anonymous=True
-        )
+        bot.send_photo(CHANNEL_ID, photo, caption=f"📘 **Topic:** {data['topic']}\n\n{data['seo_caption']}", parse_mode="Markdown")
+    for i, q in enumerate(data["questions"], 1):
+        bot.send_poll(CHANNEL_ID, f"{i}. {q['question']}", q["options"], type="quiz", correct_option_id=q["correct_index"], is_anonymous=True)
         time.sleep(3)
 
 if __name__ == "__main__":
