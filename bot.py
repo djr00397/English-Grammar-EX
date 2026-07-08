@@ -5,79 +5,79 @@ import requests
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 
+# কনফিগারেশন
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-# ফিক্সড সিরিয়াল - প্রতিবার রান হওয়ার সময় Gemini থেকে জেনারেট হবে যাতে গিটহাবের ফাইলের ওপর নির্ভর করতে না হয়
+# ধারাবাহিকভাবে সিরিয়াল নাম্বার ট্র্যাক করার জন্য একটি সিম্পল ফাইল
+SERIAL_FILE = "serial.txt"
+
+def get_next_serial():
+    if not os.path.exists(SERIAL_FILE):
+        return 1
+    with open(SERIAL_FILE, "r") as f:
+        return int(f.read().strip())
+
+def update_serial(last_serial):
+    with open(SERIAL_FILE, "w") as f:
+        f.write(str(last_serial + 3))
+
 def get_grammar_content():
     model = genai.GenerativeModel('gemini-2.5-flash')
     prompt = '''
-    You are an expert English Grammar professor. Create a highly advanced, non-repetitive English grammar lesson.
-    Based on the rule, create 3 extremely challenging exam-style MCQ questions with 5 options (A, B, C, D, E).
-    Output STRICTLY in JSON format:
+    Act as a Grammar Professor. Generate a unique, highly advanced English grammar lesson.
+    Output MUST be a JSON object (no markdown):
     {
-      "topic": "Topic Name",
-      "rule": "The grammar rule",
-      "example": "Advanced example",
-      "seo_text": "SEO caption",
+      "topic": "Name",
+      "rule": "Detailed rule",
+      "example": "Solved example",
+      "seo_text": "Engaging English caption with trending hashtags",
       "questions": [
-        {"q": "Q1 text", "options": ["A) opt", "B) opt", "C) opt", "D) opt", "E) opt"], "correct_index": 0},
-        {"q": "Q2 text", "options": ["A) opt", "B) opt", "C) opt", "D) opt", "E) opt"], "correct_index": 1},
-        {"q": "Q3 text", "options": ["A) opt", "B) opt", "C) opt", "D) opt", "E) opt"], "correct_index": 2}
+        {"q": "Q1", "options": ["A)", "B)", "C)", "D)", "E)"], "correct": 0},
+        {"q": "Q2", "options": ["A)", "B)", "C)", "D)", "E)"], "correct": 1},
+        {"q": "Q3", "options": ["A)", "B)", "C)", "D)", "E)"], "correct": 2}
       ]
     }
     '''
     response = model.generate_content(prompt)
-    raw_text = response.text.strip()
-    json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-    return json.loads(json_match.group(0))
+    return json.loads(re.search(r'\{.*\}', response.text, re.DOTALL).group(0))
 
-def create_notebook_image(topic, rule, example):
-    width, height = 850, 600
-    img = Image.new('RGB', (width, height), color='#fefcf7')
+def create_image(topic, rule, example):
+    img = Image.new('RGB', (800, 1000), color='#fefcf7')
     draw = ImageDraw.Draw(img)
-    for y in range(80, height, 45):
-        draw.line([(0, y), (width, y)], fill='#b4d4ff', width=2)
-    draw.line([(95, 0), (95, height)], fill='#ffb3ba', width=3)
-    
-    # আপনার চ্যানেলের নাম
-    draw.text((120, 30), "📝 English Grammar EX", font=ImageFont.load_default(), fill='#2c3e50')
-    
-    y_pos = 110
-    draw.text((120, y_pos), f"TOPIC: {topic}", fill='#c0392b')
-    draw.text((120, y_pos + 50), f"RULE: {rule}", fill='#2980b9')
-    draw.text((120, y_pos + 150), f"EX: {example}", fill='#27ae60')
-    
-    img_path = "grammar_lesson.png"
-    img.save(img_path)
-    return img_path
+    # আপনার চ্যানেলের নাম ওয়াটারমার্ক হিসেবে
+    draw.text((50, 20), "English Grammar EX", fill='#000000')
+    draw.text((50, 60), f"TOPIC: {topic}", fill='#ff0000')
+    draw.text((50, 120), f"RULE:\n{rule}", fill='#0000ff')
+    draw.text((50, 300), f"SOLVED EXAMPLE:\n{example}", fill='#008000')
+    img.save("post.png")
+    return "post.png"
 
-def send_to_telegram(data):
-    p1 = "https://"
-    p2 = "api.telegram.org"
-    p3 = "/bot"
-    base_url = p1 + p2 + p3 + str(BOT_TOKEN)
+def post_to_telegram(data):
+    base_url = f"https://api.telegram.org/bot{BOT_TOKEN}"
+    serial = get_next_serial()
     
-    img_path = create_notebook_image(data['topic'], data['rule'], data['example'])
+    # ইমেজ পোস্ট
+    img_path = create_image(data['topic'], data['rule'], data['example'])
+    with open(img_path, 'rb') as f:
+        requests.post(base_url + "/sendPhoto", data={"chat_id": CHANNEL_ID, "caption": data['seo_text']}, files={"photo": f})
     
-    with open(img_path, 'rb') as photo:
-        requests.post(base_url + "/sendPhoto", data={"chat_id": CHANNEL_ID, "caption": data['seo_text']}, files={"photo": photo})
-            
-    for idx, q_data in enumerate(data['questions']):
-        payload = {
+    # ৩টি কঠিন এমসিকিউ পোল (Quiz Mode)
+    for i, q in enumerate(data['questions']):
+        requests.post(base_url + "/sendPoll", data={
             "chat_id": CHANNEL_ID,
-            "question": f"Question (Advanced): {q_data['q']}",
-            "options": json.dumps(q_data['options']),
-            "is_anonymous": False,
+            "question": f"{serial + i}. {q['q']}",
+            "options": json.dumps(q['options']),
             "type": "quiz",
-            "correct_option_id": int(q_data['correct_index'])
-        }
-        requests.post(base_url + "/sendPoll", payload)
+            "correct_option_id": q['correct'],
+            "is_anonymous": False
+        })
+    update_serial(serial)
 
 if __name__ == "__main__":
-    content = get_grammar_content()
-    send_to_telegram(content)
+    data = get_grammar_content()
+    post_to_telegram(data)
     
