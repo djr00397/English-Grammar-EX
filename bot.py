@@ -11,54 +11,51 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-def get_grammar_data():
+def get_content():
     model = genai.GenerativeModel('gemini-2.5-flash')
+    # জেমিনিকে ইন্সট্রাকশন দেয়া হয়েছে ভিন্ন টপিক এবং ৩টি প্রশ্নের জন্য
     prompt = '''
-    Generate one advanced English grammar rule, one example, and 3 hard MCQ questions (5 options each).
-    Output JSON:
+    Create a unique, advanced English Grammar lesson on a random topic.
+    Return ONLY JSON:
     {
       "topic": "Topic Name",
-      "rule": "The core grammar rule (short)",
-      "example": "One clear example",
-      "seo_caption": "Caption with #EnglishGrammar #GrammarQuiz #LearnEnglish",
+      "rule": "Short Rule",
+      "example": "Simple Example",
+      "seo_hashtags": "#EnglishGrammar #LearnEnglish #AdvancedGrammar",
       "questions": [
-        {"q": "Q1", "options": ["A", "B", "C", "D", "E"], "correct": 0},
-        {"q": "Q2", "options": ["A", "B", "C", "D", "E"], "correct": 1},
-        {"q": "Q3", "options": ["A", "B", "C", "D", "E"], "correct": 2}
+        {"q": "Q1 text?", "options": ["A", "B", "C", "D"], "correct": 0},
+        {"q": "Q2 text?", "options": ["A", "B", "C", "D"], "correct": 1},
+        {"q": "Q3 text?", "options": ["A", "B", "C", "D"], "correct": 2}
       ]
     }
     '''
     response = model.generate_content(prompt)
     return json.loads(response.text.replace('```json', '').replace('```', ''))
 
-def create_clean_image(data):
-    # বড় এবং পরিষ্কার ছবি (1000x600)
-    img = Image.new('RGB', (1000, 600), color='#FFFFFF')
+def create_image(data):
+    img = Image.new('RGB', (1000, 500), color='#FFFFFF')
     draw = ImageDraw.Draw(img)
-    # বড় ফন্ট সেটআপ
-    font = ImageFont.load_default() 
-    
-    draw.text((350, 20), "English Grammar EX", fill='#0000FF')
+    # শিরোনাম, রুল এবং উদাহরণ বড় ফন্টে
+    draw.text((300, 20), "ENGLISH GRAMMAR EX", fill='#0000FF')
     draw.text((50, 100), f"TOPIC: {data['topic']}", fill='#000000')
-    
-    # লেখা যেন বড় এবং পড়ার যোগ্য হয়
-    rule_text = textwrap.fill(f"RULE: {data['rule']}", width=50)
-    draw.text((50, 180), rule_text, fill='#FF0000')
-    
-    example_text = textwrap.fill(f"EXAMPLE: {data['example']}", width=50)
-    draw.text((50, 350), example_text, fill='#008000')
-    
-    img.save("clean_card.png")
-    return "clean_card.png"
+    draw.text((50, 180), f"RULE: {textwrap.fill(data['rule'], 50)}", fill='#FF0000')
+    draw.text((50, 350), f"EXAMPLE: {textwrap.fill(data['example'], 50)}", fill='#008000')
+    img.save("card.png")
+    return "card.png"
 
-def post_to_telegram(data):
+def run():
+    data = get_content()
     base_url = f"https://api.telegram.org/bot{BOT_TOKEN}"
-    img_path = create_clean_image(data)
     
-    # ১. ইমেজ পোস্ট (শুধুমাত্র নাম, সূত্র, উদাহরণ)
-    requests.post(base_url + "/sendPhoto", data={"chat_id": CHANNEL_ID, "caption": data['seo_caption']}, files={"photo": open(img_path, 'rb')})
+    # ১. ইমেজ পোস্ট (এসইও হ্যাশট্যাগসহ)
+    img = create_image(data)
+    requests.post(base_url + "/sendPhoto", data={
+        "chat_id": CHANNEL_ID, 
+        "caption": f"📖 Master today's grammar rule! \n\n{data['seo_hashtags']}",
+        "photo": open(img, 'rb')
+    })
     
-    # ২. ৩টি প্রশ্ন আলাদা আলাদা পোস্ট (বাটনসহ পোল)
+    # ২. ৩টি আলাদা পোল (প্রশ্ন) পোস্ট করা
     for q in data['questions']:
         requests.post(base_url + "/sendPoll", data={
             "chat_id": CHANNEL_ID,
@@ -70,6 +67,5 @@ def post_to_telegram(data):
         })
 
 if __name__ == "__main__":
-    data = get_grammar_data()
-    post_to_telegram(data)
+    run()
     
