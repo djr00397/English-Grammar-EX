@@ -1,105 +1,142 @@
 import os
-import time
 import json
-import telebot
+import requests
 import google.generativeai as genai
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-# GitHub Secrets থেকে ডেটা রিড
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+# GitHub Secrets থেকে ডাটা নেওয়া হচ্ছে (ADSTERRA_LINK বাদ দেওয়া হয়েছে)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
-bot = telebot.TeleBot(BOT_TOKEN)
-genai.configure(api_key=GEMINI_KEY)
+# জেমিনি এপিআই কনফিগারেশন
+genai.configure(api_key=GEMINI_API_KEY)
 
-# লেটেস্ট গুগল মডেল
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
-
-def get_seo_content_from_gemini():
-    """Generates Random English Grammar Content with Randomized Answers."""
-    prompt = """
-    Select a random, challenging English grammar topic. 
-    Create 3 unique MCQ questions. 
-    IMPORTANT: Randomize the correct answer index (0, 1, 2, or 3) for each question. Do not keep it always at 0.
-    Output MUST be valid JSON only.
-    
+def get_grammar_content():
+    """জেমিনি থেকে নতুন, কঠিন প্রশ্ন এবং সূত্র তৈরি করা"""
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    prompt = '''
+    You are an expert English Grammar instructor.
+    Create a unique, highly advanced English grammar lesson. Do not repeat previous topics.
+    Provide the output strictly in valid JSON format exactly matching this structure (no markdown tags around the JSON):
     {
-      "topic": "Name of the topic",
-      "formula": "Concise grammar rule",
-      "seo_caption": "2-sentence engaging caption with 5-7 trending hashtags",
+      "topic": "Name of the advanced topic",
+      "rule": "The grammar rule in short (max 2 sentences)",
+      "example": "A clear example applying the rule",
+      "seo_text": "Engaging SEO-optimized caption for a Telegram post including high traffic hashtags",
       "questions": [
         {
-          "question": "Question text?",
-          "options": ["A", "B", "C", "D"],
-          "correct_index": 1,
-          "explanation": "Why this is correct."
+          "q": "Extremely difficult question 1",
+          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+          "correct_index": 0
+        },
+        {
+          "q": "Extremely difficult question 2",
+          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+          "correct_index": 1
+        },
+        {
+          "q": "Extremely difficult question 3",
+          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+          "correct_index": 2
         }
       ]
     }
-    """
+    Important: 
+    1. Ensure the correct_index (0 to 3) is randomized for each question (It can be A, B, C, or D).
+    2. Output ONLY the JSON object.
+    '''
     
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
-            )
-        )
-        # JSON ক্লিন করা
-        return json.loads(response.text.strip())
-    except Exception as e:
-        print("API Error:", e)
-        return None
+    response = model.generate_content(prompt)
+    raw_text = response.text.strip()
+    
+    # JSON ফরম্যাট ক্লিনিং
+    if raw_text.startswith("```json"):
+        raw_text = raw_text[7:]
+    if raw_text.startswith("```"):
+        raw_text = raw_text[3:]
+    if raw_text.endswith("```"):
+        raw_text = raw_text[:-3]
+        
+    return json.loads(raw_text.strip())
 
-def create_notebook_image(topic, formula):
-    """Creates a professional grammar notebook style image."""
-    img = Image.new('RGB', (800, 800), color='#F9F6EE')
+def create_notebook_image(topic, rule, example):
+    """সূত্র ও উদাহরণ দিয়ে খাতার মত ছবি তৈরি করা"""
+    width, height = 800, 500
+    img = Image.new('RGB', (width, height), color='#fdfbf7')
     draw = ImageDraw.Draw(img)
-    
-    for y in range(120, 800, 50):
-        draw.line([(0, y), (800, y)], fill="#B0C4DE", width=2)
-    draw.line([(100, 0), (100, 800)], fill="#FA8072", width=3)
-    
-    draw.text((120, 50), f"GRAMMAR: {topic.upper()}", fill="#B22222")
-    draw.text((120, 130), "📌 FORMULA:", fill="#000080")
-    
-    y_offset = 180
-    for line in formula.split('\n'):
-        draw.text((120, y_offset), line, fill="#333333")
-        y_offset += 50
-        
-    img.save("lesson.png")
 
-def main():
-    print("Starting Automated Grammar Bot...")
-    
-    content = get_seo_content_from_gemini()
-    if not content:
-        print("Failed to get content.")
-        return
+    # খাতার দাগ টানা
+    for y in range(80, height, 40):
+        draw.line([(0, y), (width, y)], fill='#a1c4fd', width=2)
+    draw.line([(80, 0), (80, height)], fill='#ffb3ba', width=3)
 
-    create_notebook_image(content["topic"], content["formula"])
+    try:
+        font_title = ImageFont.truetype("arial.ttf", 28)
+        font_text = ImageFont.truetype("arial.ttf", 22)
+    except IOError:
+        font_title = ImageFont.load_default()
+        font_text = ImageFont.load_default()
+
+    def draw_wrapped_text(text, position, font, fill, max_width=650):
+        import textwrap
+        lines = textwrap.wrap(text, width=55)
+        y_text = position[1]
+        for line in lines:
+            draw.text((position[0], y_text), line, font=font, fill=fill)
+            y_text += 40
+        return y_text
+
+    # টেক্সট বসানো
+    y_pos = 90
+    draw.text((100, 30), "📚 Advanced Grammar Guide", font=font_title, fill='#e74c3c')
     
-    caption = f"📘 Topic: {content['topic']}\n\n{content['seo_caption']}"
+    y_pos = draw_wrapped_text(f"Topic: {topic}", (100, y_pos), font=font_title, fill='#2c3e50')
+    y_pos += 10
     
-    with open("lesson.png", "rb") as photo:
-        bot.send_photo(CHANNEL_ID, photo, caption=caption, parse_mode="Markdown")
+    draw.text((100, y_pos), "Rule:", font=font_title, fill='#2980b9')
+    y_pos += 40
+    y_pos = draw_wrapped_text(rule, (100, y_pos), font=font_text, fill='#34495e')
+    y_pos += 10
     
-    for index, q in enumerate(content["questions"], start=1):
-        bot.send_poll(
-            chat_id=CHANNEL_ID,
-            question=f"{index}. {q['question']}",
-            options=q["options"],
-            type="quiz",
-            correct_option_id=q["correct_index"],
-            explanation=q.get("explanation", "Correct Answer"),
-            is_anonymous=True
-        )
-        time.sleep(3)
-        
-    print("Post sent successfully!")
+    draw.text((100, y_pos), "Example:", font=font_title, fill='#27ae60')
+    y_pos += 40
+    draw_wrapped_text(example, (100, y_pos), font=font_text, fill='#34495e')
+
+    img_path = "grammar_lesson.png"
+    img.save(img_path)
+    return img_path
+
+def send_to_telegram(data, img_path):
+    """টেলিগ্রামে পোস্ট করা (ছবি এবং কুইজ)"""
+    base_url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){BOT_TOKEN}"
+    
+    # ১. ছবি এবং SEO ক্যাপশন পাঠানো
+    with open(img_path, 'rb') as photo:
+        # ক্যাপশন থেকে লিংক বাদ দেওয়া হয়েছে
+        caption_text = f"{data['seo_text']}\n\n👉 **উপরের ছবিটি ভালোভাবে পড়ুন এবং নিচের কুইজগুলোর উত্তর দিন!**"
+        payload = {
+            "chat_id": CHANNEL_ID,
+            "caption": caption_text,
+            "parse_mode": "Markdown"
+        }
+        requests.post(f"{base_url}/sendPhoto", data=payload, files={"photo": photo})
+            
+    # ২. কুইজ পোল পাঠানো (Quiz Mode - পরিবর্তন করা যাবে না)
+    for idx, q_data in enumerate(data['questions']):
+        poll_payload = {
+            "chat_id": CHANNEL_ID,
+            "question": f"Q{idx + 1}: {q_data['q']}",
+            "options": json.dumps(q_data['options']),
+            "is_anonymous": False,
+            "type": "quiz", # কুইজ মোড চালু
+            "correct_option_id": q_data['correct_index']
+            # বাটন এবং এক্সপ্লানেশন লিংক রিমুভ করা হয়েছে
+        }
+        requests.post(f"{base_url}/sendPoll", data=poll_payload)
 
 if __name__ == "__main__":
-    main()
+    content = get_grammar_content()
+    img_file = create_notebook_image(content['topic'], content['rule'], content['example'])
+    send_to_telegram(content, img_file)
     
