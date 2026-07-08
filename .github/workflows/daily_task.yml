@@ -2,8 +2,7 @@ name: Auto Telegram Poster
 
 on:
   schedule:
-    # দিনে দু'বার পোস্ট করবে (উচ্চ RPM দেশ টার্গেট করে)
-    - cron: '0 13,1 * * *'
+    - cron: '0 1,13 * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,6 +11,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -27,4 +28,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python bot.py
-        
+
+      - name: Commit and Push Serial Number Changes
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add data.json
+          git commit -m "Update grammar quiz serial number" || exit 0
+          git push
+          
