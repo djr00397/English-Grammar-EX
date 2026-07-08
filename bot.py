@@ -60,15 +60,18 @@ def get_grammar_content():
         
     return json.loads(raw_text.strip())
 
-def download_font():
-    """Download a clean bold font for the image generator"""
-    font_url = "[https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf](https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf)"
-    font_path = "Roboto-Bold.ttf"
-    if not os.path.exists(font_path):
-        response = requests.get(font_url)
-        with open(font_path, "wb") as f:
-            f.write(response.content)
-    return font_path
+def load_system_font(size):
+    """Load default Linux system font to avoid internet download issues"""
+    # Linux/Ubuntu standard fonts available on GitHub runner
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
 
 def create_notebook_image(topic, rule, example):
     """Create a digital notebook-style image with the grammar rule"""
@@ -82,11 +85,10 @@ def create_notebook_image(topic, rule, example):
     # Draw vertical margin line (red)
     draw.line([(95, 0), (95, height)], fill='#ffb3ba', width=3)
 
-    # Load Font
-    font_path = download_font()
-    font_title = ImageFont.truetype(font_path, 30)
-    font_section = ImageFont.truetype(font_path, 24)
-    font_text = ImageFont.truetype(font_path, 22)
+    # Load Fonts safely from the system
+    font_title = load_system_font(30)
+    font_section = load_system_font(24)
+    font_text = load_system_font(22)
 
     def draw_wrapped_text(text, position, font, fill, max_width=680):
         import textwrap
@@ -151,4 +153,4 @@ if __name__ == "__main__":
     print("Posting to Telegram Channel...")
     send_to_telegram(content, img_file)
     print("Successfully Posted!")
-    
+            
