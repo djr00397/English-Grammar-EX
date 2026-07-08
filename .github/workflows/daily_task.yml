@@ -1,39 +1,20 @@
 name: Auto Telegram Poster
-
 on:
   schedule:
     - cron: '0 1,13 * * *'
   workflow_dispatch:
-
 jobs:
-  post_grammar:
+  post:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run Auto Poster Script
+      - run: pip install google-generativeai Pillow requests
+      - run: python bot.py
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python bot.py
-
-      - name: Commit and Push Serial Number Changes
-        run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add data.json
-          git commit -m "Update grammar quiz serial number" || exit 0
-          git push
           
