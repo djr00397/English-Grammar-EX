@@ -1,24 +1,26 @@
 import os
 import json
+import re
 import requests
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 
-# Fetch data from GitHub Secrets
+# 1. GitHub Secrets থেকে ক্রিশিয়াল ডাটা নেওয়া হচ্ছে
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
-# Configure Gemini API
+# জেমিনি এপিআই কনফিগারেশন
 genai.configure(api_key=GEMINI_API_KEY)
 
 def get_grammar_content():
-    """Generate high-quality advanced grammar lesson and questions via Gemini"""
+    """জেমিনি থেকে ডাটা নিয়ে আসা এবং সকল ফরম্যাটিং এরর দূর করা"""
     model = genai.GenerativeModel('gemini-2.5-flash')
+    
     prompt = '''
     You are an expert English Grammar instructor.
-    Create a unique, highly advanced English grammar lesson. Do not repeat basic topics.
-    Provide the output strictly in valid JSON format exactly matching this structure (no markdown tags around the JSON):
+    Create a unique, highly advanced English grammar lesson.
+    Provide the output STRICTLY in valid JSON format exactly matching this structure:
     {
       "topic": "Name of the advanced topic",
       "rule": "The grammar rule in short (max 2 sentences)",
@@ -42,27 +44,27 @@ def get_grammar_content():
         }
       ]
     }
-    Important: 
-    1. Ensure the correct_index (0 to 3) is randomized for each question so it's not always the same option.
-    2. Output ONLY the JSON object, do not wrap in markdown boxes.
+    Important: Output ONLY the JSON object. Do not wrap it in markdown boxes or text.
     '''
     
     response = model.generate_content(prompt)
     raw_text = response.text.strip()
     
-    # JSON Clean up
-    if raw_text.startswith("```json"):
-        raw_text = raw_text[7:]
-    if raw_text.startswith("```"):
-        raw_text = raw_text[3:]
-    if raw_text.endswith("```"):
-        raw_text = raw_text[:-3]
-        
-    return json.loads(raw_text.strip())
+    # এরর প্রতিরোধের জন্য রেগুলার এক্সপ্রেশন ব্যবহার করে শুধু JSON অংশটুকু কেটে নেওয়া হচ্ছে
+    try:
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if json_match:
+            clean_text = json_match.group(0)
+        else:
+            clean_text = raw_text
+            
+        return json.loads(clean_text)
+    except Exception as e:
+        print(f"Critial Error Parsing JSON. Raw text was: {raw_text}")
+        raise e
 
 def load_system_font(size):
-    """Load default Linux system font to avoid internet download issues"""
-    # Linux/Ubuntu standard fonts available on GitHub runner
+    """গিটহাব উবুন্টু সার্ভারের নিজস্ব ফন্ট লোড করা (এরর ফ্রি)"""
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -74,23 +76,23 @@ def load_system_font(size):
     return ImageFont.load_default()
 
 def create_notebook_image(topic, rule, example):
-    """Create a digital notebook-style image with the grammar rule"""
+    """খাতার ডিজাইনে ইমেজ তৈরি করা"""
     width, height = 850, 600
     img = Image.new('RGB', (width, height), color='#fefcf7')
     draw = ImageDraw.Draw(img)
 
-    # Draw horizontal notebook lines (blue)
+    # খাতার নীল দাগ
     for y in range(80, height, 45):
         draw.line([(0, y), (width, y)], fill='#b4d4ff', width=2)
-    # Draw vertical margin line (red)
+    # খাতার লাল মার্জিন
     draw.line([(95, 0), (95, height)], fill='#ffb3ba', width=3)
 
-    # Load Fonts safely from the system
+    # ফন্ট সেটআপ
     font_title = load_system_font(30)
     font_section = load_system_font(24)
     font_text = load_system_font(22)
 
-    def draw_wrapped_text(text, position, font, fill, max_width=680):
+    def draw_wrapped_text(text, position, font, fill):
         import textwrap
         lines = textwrap.wrap(text, width=50)
         y_text = position[1]
@@ -99,7 +101,7 @@ def create_notebook_image(topic, rule, example):
             y_text += 45
         return y_text
 
-    # Populate notebook layout
+    # টেক্সট ড্রয়িং
     draw.text((120, 30), "📝 ADVANCED GRAMMAR NOTEBOOK", font=font_title, fill='#2c3e50')
     
     y_pos = 110
@@ -120,10 +122,10 @@ def create_notebook_image(topic, rule, example):
     return img_path
 
 def send_to_telegram(data, img_path):
-    """Post image and Quiz questions to Telegram Channel"""
+    """টেলিগ্রাম চ্যানেলে রিকোয়েস্ট পাঠানো"""
     base_url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){BOT_TOKEN}"
     
-    # 1. Send Photo with English SEO Caption
+    # ১. ছবি এবং ক্যাপশন পাঠানো (সম্পূর্ণ ইংরেজি)
     with open(img_path, 'rb') as photo:
         caption_text = f"{data['seo_text']}\n\n👉 **Read the advanced rule above carefully and answer the 3 questions below!** 🔽"
         payload = {
@@ -131,9 +133,10 @@ def send_to_telegram(data, img_path):
             "caption": caption_text,
             "parse_mode": "Markdown"
         }
-        requests.post(f"{base_url}/sendPhoto", data=payload, files={"photo": photo})
+        r1 = requests.post(f"{base_url}/sendPhoto", data=payload, files={"photo": photo})
+        print(f"Photo Sent Status: {r1.status_code}, Response: {r1.text}")
             
-    # 2. Send 3 Telegram Native Quizzes (Quiz Mode enabled - locks answer once clicked)
+    # ২. ৩টি কুইজ পোল পাঠানো (Quiz Mode)
     for idx, q_data in enumerate(data['questions']):
         poll_payload = {
             "chat_id": CHANNEL_ID,
@@ -141,16 +144,19 @@ def send_to_telegram(data, img_path):
             "options": json.dumps(q_data['options']),
             "is_anonymous": False,
             "type": "quiz", 
-            "correct_option_id": q_data['correct_index']
+            "correct_option_id": int(q_data['correct_index'])
         }
-        requests.post(f"{base_url}/sendPoll", data=poll_payload)
+        r2 = requests.post(f"{base_url}/sendPoll", data=poll_payload)
+        print(f"Quiz {idx+1} Sent Status: {r2.status_code}, Response: {r2.text}")
 
 if __name__ == "__main__":
-    print("Fetching grammar content from Gemini...")
+    print("Step 1: Fetching grammar content from Gemini...")
     content = get_grammar_content()
-    print("Generating notebook style image...")
+    
+    print("Step 2: Generating notebook style image...")
     img_file = create_notebook_image(content['topic'], content['rule'], content['example'])
-    print("Posting to Telegram Channel...")
+    
+    print("Step 3: Posting to Telegram Channel...")
     send_to_telegram(content, img_file)
-    print("Successfully Posted!")
-            
+    print("Process successfully finished!")
+    
