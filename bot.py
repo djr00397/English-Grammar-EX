@@ -4,20 +4,20 @@ import requests
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 
-# GitHub Secrets থেকে ডাটা নেওয়া হচ্ছে (ADSTERRA_LINK বাদ দেওয়া হয়েছে)
+# Fetch data from GitHub Secrets
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
-# জেমিনি এপিআই কনফিগারেশন
+# Configure Gemini API
 genai.configure(api_key=GEMINI_API_KEY)
 
 def get_grammar_content():
-    """জেমিনি থেকে নতুন, কঠিন প্রশ্ন এবং সূত্র তৈরি করা"""
+    """Generate high-quality advanced grammar lesson and questions via Gemini"""
     model = genai.GenerativeModel('gemini-2.5-flash')
     prompt = '''
     You are an expert English Grammar instructor.
-    Create a unique, highly advanced English grammar lesson. Do not repeat previous topics.
+    Create a unique, highly advanced English grammar lesson. Do not repeat basic topics.
     Provide the output strictly in valid JSON format exactly matching this structure (no markdown tags around the JSON):
     {
       "topic": "Name of the advanced topic",
@@ -27,30 +27,30 @@ def get_grammar_content():
       "questions": [
         {
           "q": "Extremely difficult question 1",
-          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+          "options": ["Option A", "Option B", "Option C", "Option D"],
           "correct_index": 0
         },
         {
           "q": "Extremely difficult question 2",
-          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+          "options": ["Option A", "Option B", "Option C", "Option D"],
           "correct_index": 1
         },
         {
           "q": "Extremely difficult question 3",
-          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+          "options": ["Option A", "Option B", "Option C", "Option D"],
           "correct_index": 2
         }
       ]
     }
     Important: 
-    1. Ensure the correct_index (0 to 3) is randomized for each question (It can be A, B, C, or D).
-    2. Output ONLY the JSON object.
+    1. Ensure the correct_index (0 to 3) is randomized for each question so it's not always the same option.
+    2. Output ONLY the JSON object, do not wrap in markdown boxes.
     '''
     
     response = model.generate_content(prompt)
     raw_text = response.text.strip()
     
-    # JSON ফরম্যাট ক্লিনিং
+    # JSON Clean up
     if raw_text.startswith("```json"):
         raw_text = raw_text[7:]
     if raw_text.startswith("```"):
@@ -60,61 +60,70 @@ def get_grammar_content():
         
     return json.loads(raw_text.strip())
 
+def download_font():
+    """Download a clean bold font for the image generator"""
+    font_url = "[https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf](https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf)"
+    font_path = "Roboto-Bold.ttf"
+    if not os.path.exists(font_path):
+        response = requests.get(font_url)
+        with open(font_path, "wb") as f:
+            f.write(response.content)
+    return font_path
+
 def create_notebook_image(topic, rule, example):
-    """সূত্র ও উদাহরণ দিয়ে খাতার মত ছবি তৈরি করা"""
-    width, height = 800, 500
-    img = Image.new('RGB', (width, height), color='#fdfbf7')
+    """Create a digital notebook-style image with the grammar rule"""
+    width, height = 850, 600
+    img = Image.new('RGB', (width, height), color='#fefcf7')
     draw = ImageDraw.Draw(img)
 
-    # খাতার দাগ টানা
-    for y in range(80, height, 40):
-        draw.line([(0, y), (width, y)], fill='#a1c4fd', width=2)
-    draw.line([(80, 0), (80, height)], fill='#ffb3ba', width=3)
+    # Draw horizontal notebook lines (blue)
+    for y in range(80, height, 45):
+        draw.line([(0, y), (width, y)], fill='#b4d4ff', width=2)
+    # Draw vertical margin line (red)
+    draw.line([(95, 0), (95, height)], fill='#ffb3ba', width=3)
 
-    try:
-        font_title = ImageFont.truetype("arial.ttf", 28)
-        font_text = ImageFont.truetype("arial.ttf", 22)
-    except IOError:
-        font_title = ImageFont.load_default()
-        font_text = ImageFont.load_default()
+    # Load Font
+    font_path = download_font()
+    font_title = ImageFont.truetype(font_path, 30)
+    font_section = ImageFont.truetype(font_path, 24)
+    font_text = ImageFont.truetype(font_path, 22)
 
-    def draw_wrapped_text(text, position, font, fill, max_width=650):
+    def draw_wrapped_text(text, position, font, fill, max_width=680):
         import textwrap
-        lines = textwrap.wrap(text, width=55)
+        lines = textwrap.wrap(text, width=50)
         y_text = position[1]
         for line in lines:
             draw.text((position[0], y_text), line, font=font, fill=fill)
-            y_text += 40
+            y_text += 45
         return y_text
 
-    # টেক্সট বসানো
-    y_pos = 90
-    draw.text((100, 30), "📚 Advanced Grammar Guide", font=font_title, fill='#e74c3c')
+    # Populate notebook layout
+    draw.text((120, 30), "📝 ADVANCED GRAMMAR NOTEBOOK", font=font_title, fill='#2c3e50')
     
-    y_pos = draw_wrapped_text(f"Topic: {topic}", (100, y_pos), font=font_title, fill='#2c3e50')
-    y_pos += 10
+    y_pos = 110
+    y_pos = draw_wrapped_text(f"📌 TOPIC: {topic}", (120, y_pos), font=font_section, fill='#c0392b')
+    y_pos += 15
     
-    draw.text((100, y_pos), "Rule:", font=font_title, fill='#2980b9')
+    draw.text((120, y_pos), "📖 RULE:", font=font_section, fill='#2980b9')
     y_pos += 40
-    y_pos = draw_wrapped_text(rule, (100, y_pos), font=font_text, fill='#34495e')
-    y_pos += 10
+    y_pos = draw_wrapped_text(rule, (120, y_pos), font=font_text, fill='#34495e')
+    y_pos += 15
     
-    draw.text((100, y_pos), "Example:", font=font_title, fill='#27ae60')
+    draw.text((120, y_pos), "💡 EXAMPLE:", font=font_section, fill='#27ae60')
     y_pos += 40
-    draw_wrapped_text(example, (100, y_pos), font=font_text, fill='#34495e')
+    draw_wrapped_text(example, (120, y_pos), font=font_text, fill='#2c3e50')
 
     img_path = "grammar_lesson.png"
     img.save(img_path)
     return img_path
 
 def send_to_telegram(data, img_path):
-    """টেলিগ্রামে পোস্ট করা (ছবি এবং কুইজ)"""
+    """Post image and Quiz questions to Telegram Channel"""
     base_url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){BOT_TOKEN}"
     
-    # ১. ছবি এবং SEO ক্যাপশন পাঠানো
+    # 1. Send Photo with English SEO Caption
     with open(img_path, 'rb') as photo:
-        # ক্যাপশন থেকে লিংক বাদ দেওয়া হয়েছে
-        caption_text = f"{data['seo_text']}\n\n👉 **উপরের ছবিটি ভালোভাবে পড়ুন এবং নিচের কুইজগুলোর উত্তর দিন!**"
+        caption_text = f"{data['seo_text']}\n\n👉 **Read the advanced rule above carefully and answer the 3 questions below!** 🔽"
         payload = {
             "chat_id": CHANNEL_ID,
             "caption": caption_text,
@@ -122,21 +131,24 @@ def send_to_telegram(data, img_path):
         }
         requests.post(f"{base_url}/sendPhoto", data=payload, files={"photo": photo})
             
-    # ২. কুইজ পোল পাঠানো (Quiz Mode - পরিবর্তন করা যাবে না)
+    # 2. Send 3 Telegram Native Quizzes (Quiz Mode enabled - locks answer once clicked)
     for idx, q_data in enumerate(data['questions']):
         poll_payload = {
             "chat_id": CHANNEL_ID,
             "question": f"Q{idx + 1}: {q_data['q']}",
             "options": json.dumps(q_data['options']),
             "is_anonymous": False,
-            "type": "quiz", # কুইজ মোড চালু
+            "type": "quiz", 
             "correct_option_id": q_data['correct_index']
-            # বাটন এবং এক্সপ্লানেশন লিংক রিমুভ করা হয়েছে
         }
         requests.post(f"{base_url}/sendPoll", data=poll_payload)
 
 if __name__ == "__main__":
+    print("Fetching grammar content from Gemini...")
     content = get_grammar_content()
+    print("Generating notebook style image...")
     img_file = create_notebook_image(content['topic'], content['rule'], content['example'])
+    print("Posting to Telegram Channel...")
     send_to_telegram(content, img_file)
+    print("Successfully Posted!")
     
