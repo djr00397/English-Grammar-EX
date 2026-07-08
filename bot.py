@@ -13,61 +13,48 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 def get_grammar_data():
     model = genai.GenerativeModel('gemini-2.5-flash')
+    # জেমিনিকে দিয়ে শুধু সূত্র এবং এমসিকিউ তৈরি করা হচ্ছে
     prompt = '''
-    Create a unique, advanced English Grammar lesson.
-    Output ONLY JSON (no markdown):
+    Create one advanced English Grammar rule, one example, and 3 hard MCQ questions.
+    Output JSON:
     {
       "topic": "Topic Name",
-      "rule": "Only the core rule in 2-3 short lines",
-      "example": "One clear solved example",
-      "caption": "Engaging English caption with hashtags",
+      "rule": "One short, clear rule",
+      "example": "One clear example",
       "questions": [
-        {"q": "Question 1 text", "options": ["A", "B", "C", "D", "E"], "correct": 0},
-        {"q": "Question 2 text", "options": ["A", "B", "C", "D", "E"], "correct": 1},
-        {"q": "Question 3 text", "options": ["A", "B", "C", "D", "E"], "correct": 2}
+        {"q": "Q1", "options": ["A", "B", "C", "D", "E"], "correct": 0},
+        {"q": "Q2", "options": ["A", "B", "C", "D", "E"], "correct": 1},
+        {"q": "Q3", "options": ["A", "B", "C", "D", "E"], "correct": 2}
       ]
     }
     '''
     response = model.generate_content(prompt)
     return json.loads(response.text.replace('```json', '').replace('```', ''))
 
-def create_image(data):
-    # ছবির সাইজ বাড়ানো হয়েছে যাতে লেখা পরিষ্কার থাকে
-    img = Image.new('RGB', (1000, 800), color='#FFFFFF')
+def create_clean_image(data):
+    # কার্ড ডিজাইন - পরিষ্কার ব্যাকগ্রাউন্ড
+    img = Image.new('RGB', (1000, 500), color='#FFFFFF')
     draw = ImageDraw.Draw(img)
-    font = ImageFont.load_default()
     
     # চ্যানেলের নাম
-    draw.text((300, 30), "English Grammar EX", fill='#0000FF')
-    # টপিক
+    draw.text((350, 30), "English Grammar EX", fill='#0000FF')
+    # সূত্র ও উদাহরণ
     draw.text((50, 100), f"TOPIC: {data['topic']}", fill='#000000')
+    draw.text((50, 150), f"RULE: {data['rule']}", fill='#FF0000')
+    draw.text((50, 250), f"EXAMPLE: {data['example']}", fill='#008000')
     
-    # লেখাগুলোকে র‍্যাপ করা যাতে ভেঙে না যায়
-    rule_lines = textwrap.wrap(f"RULE: {data['rule']}", width=60)
-    y = 160
-    for line in rule_lines:
-        draw.text((50, y), line, fill='#FF0000')
-        y += 30
-        
-    ex_lines = textwrap.wrap(f"EXAMPLE: {data['example']}", width=60)
-    y += 40
-    for line in ex_lines:
-        draw.text((50, y), line, fill='#008000')
-        y += 30
-        
-    img.save("post.png")
-    return "post.png"
+    img.save("card.png")
+    return "card.png"
 
-def run():
-    data = get_grammar_data()
+def post_to_telegram(data):
     base_url = f"https://api.telegram.org/bot{BOT_TOKEN}"
-    img_path = create_image(data)
+    img_path = create_clean_image(data)
     
     # ছবি পাঠানো
     with open(img_path, 'rb') as f:
-        requests.post(base_url + "/sendPhoto", data={"chat_id": CHANNEL_ID, "caption": data['caption']}, files={"photo": f})
+        requests.post(base_url + "/sendPhoto", data={"chat_id": CHANNEL_ID}, files={"photo": f})
     
-    # এমসিকিউ পোল পাঠানো (লুপ দিয়ে ৩টি পোল)
+    # ৩টি এমসিকিউ বাটন পাঠানো
     for q in data['questions']:
         requests.post(base_url + "/sendPoll", data={
             "chat_id": CHANNEL_ID,
@@ -79,5 +66,6 @@ def run():
         })
 
 if __name__ == "__main__":
-    run()
+    data = get_grammar_data()
+    post_to_telegram(data)
     
